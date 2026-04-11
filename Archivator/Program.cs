@@ -1,9 +1,10 @@
 ﻿using System.Diagnostics;
 using Archivator;
 using Archivator.Huff;
+using Archivator.PPMd;
 
-if (args.Length < 3 ||
-    (args.Length == 1 && args[0].Equals("TestData", StringComparison.InvariantCultureIgnoreCase) is false)
+if (args.Length < 3 &&
+    !(args.Length == 1 && args[0].Equals("TestData", StringComparison.InvariantCultureIgnoreCase))
    )
 {
     Console.WriteLine("Usage: [encoder|decoder] [inputPath] [outputPath]");
@@ -11,6 +12,7 @@ if (args.Length < 3 ||
     return;
 }
 
+const int modelOrder = 6;
 var command = args[0];
 
 var sw = new Stopwatch();
@@ -19,41 +21,52 @@ sw.Start();
 switch (command.ToLower())
 {
     case "encoder":
-        {
-            string inputPath = args[1], outputPath = args[2];
-            var encoder = new HuffmanEncoder();
-            await encoder.Encode(inputPath, outputPath);
+    {
+        string inputPath = args[1], outputPath = args[2];
+        IEncoder encoder = new PpmdEncoder(modelOrder);
+        await encoder.Encode(inputPath, outputPath);
 
-            break;
-        }
+        break;
+    }
     case "decoder":
-        {
-            string inputPath = args[1], outputPath = args[2];
-            var decoder = new HuffmanDecoder();
-            await decoder.Decode(inputPath, outputPath);
+    {
+        string inputPath = args[1], outputPath = args[2];
+        IDecoder decoder = new PpmdDecoder();
+        await decoder.Decode(inputPath, outputPath);
 
-            break;
-        }
+        break;
+    }
     case "testdata":
+    {
+        const string basePath = "./../../../TestData/";
+        var files = Directory.EnumerateFiles(basePath);
+        long totalCompressedSize = 0;
+
+        foreach (var file in files.Where(x => x.Contains(".decoded") is false && x.Contains(".encoded") is false))
         {
-            const string basePath = "./../../../TestData/";
-            var files = Directory.EnumerateFiles(basePath);
+            var huffmanFile = file + ".encoded";
 
-            foreach (var file in files.Where(x => x.Contains(".decoded") is false && x.Contains(".encoded") is false))
-            {
-                var huffmanFile = file + ".encoded";
+            IEncoder encoder = new PpmdEncoder(modelOrder);
+            await encoder.Encode(file, huffmanFile);
 
-                var encoder = new HuffmanEncoder();
-                await encoder.Encode(file, huffmanFile);
+            var compressedSize = new FileInfo(huffmanFile).Length;
+            totalCompressedSize += compressedSize;
 
-                var decoder = new HuffmanDecoder();
-                await decoder.Decode(huffmanFile, file + ".decoded");
+            IDecoder decoder = new PpmdDecoder();
+            await decoder.Decode(huffmanFile, file + ".decoded");
 
-                File.Delete(huffmanFile);
-            }
+            var original = await File.ReadAllBytesAsync(file);
+            var decoded = await File.ReadAllBytesAsync(file + ".decoded");
+            var match = original.Length == decoded.Length && original.SequenceEqual(decoded);
+            Console.WriteLine($"Bit-perfect decode: {(match ? "OK" : "MISMATCH")}");
 
-            break;
+            File.Delete(huffmanFile);
         }
+
+        Console.WriteLine($"\nTotal compressed size: {totalCompressedSize} bytes");
+
+        break;
+    }
     default:
         Console.WriteLine($"Unknown command: {command}");
         Console.WriteLine("Usage: [encoder|decoder] [inputPath] [outputPath]");

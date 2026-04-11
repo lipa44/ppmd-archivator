@@ -1,6 +1,6 @@
 namespace Archivator.Huff;
 
-public class HuffmanDecoder
+public class HuffmanDecoder : IDecoder
 {
     private const int BitsInByte = 8;
 

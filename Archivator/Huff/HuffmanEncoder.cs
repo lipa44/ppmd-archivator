@@ -3,7 +3,7 @@ using Humanizer;
 
 namespace Archivator.Huff;
 
-public class HuffmanEncoder
+public class HuffmanEncoder : IEncoder
 {
     private const int BitsInByte = 8;
 
