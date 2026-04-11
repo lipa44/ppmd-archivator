@@ -1,4 +1,4 @@
-namespace Archivator;
+namespace Archivator.Huff;
 
 public static class MoveToFront
 {

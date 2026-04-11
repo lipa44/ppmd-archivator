@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using Archivator;
+using Archivator.Huff;
 
 if (args.Length < 3 ||
     (args.Length == 1 && args[0].Equals("TestData", StringComparison.InvariantCultureIgnoreCase) is false)

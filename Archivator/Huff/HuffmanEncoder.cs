@@ -1,7 +1,7 @@
-namespace Archivator;
-
 using System.Text;
 using Humanizer;
+
+namespace Archivator.Huff;
 
 public class HuffmanEncoder
 {
