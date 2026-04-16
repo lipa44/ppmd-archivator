@@ -1,6 +1,5 @@
 ﻿using System.Diagnostics;
 using Archivator;
-using Archivator.Huff;
 using Archivator.PPMd;
 
 if (args.Length < 3 &&
