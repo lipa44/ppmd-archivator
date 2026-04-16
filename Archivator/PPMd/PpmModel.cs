@@ -8,11 +8,12 @@ public sealed class PpmModel
     private readonly ContextNode?[] _newPath;
     private readonly bool[] _excluded = new bool[256];
 
-    private const int RescaleThreshold = 8192;
+    private readonly int _rescaleThreshold;
 
-    public PpmModel(int maxOrder)
+    public PpmModel(int maxOrder, int rescaleThreshold = 8192)
     {
         _maxOrder = maxOrder;
+        _rescaleThreshold = rescaleThreshold;
         _path = new ContextNode?[maxOrder + 1];
         _newPath = new ContextNode?[maxOrder + 1];
         _path[0] = _root;
@@ -172,7 +173,7 @@ public sealed class PpmModel
             ctx.Frequencies[symbol] = count + 1;
             ctx.TotalCount++;
 
-            if (ctx.TotalCount >= RescaleThreshold)
+            if (ctx.TotalCount >= _rescaleThreshold)
                 Rescale(ctx);
         }
 

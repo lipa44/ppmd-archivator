@@ -2,7 +2,7 @@ using Humanizer;
 
 namespace Archivator.PPMd;
 
-public class PpmdEncoder(int modelOrder = 6) : IEncoder
+public class PpmdEncoder(int modelOrder = 6, int rescaleThreshold = 8192) : IEncoder
 {
     public async Task Encode(string inputPath, string outputPath)
     {
@@ -19,9 +19,10 @@ public class PpmdEncoder(int modelOrder = 6) : IEncoder
 
         writer.Write(inputData.Length);
         writer.Write((byte) modelOrder);
+        writer.Write((ushort) rescaleThreshold);
         writer.Flush();
 
-        var model = new PpmModel(modelOrder);
+        var model = new PpmModel(modelOrder, rescaleThreshold);
         var encoder = new RangeEncoder(outStream);
 
         for (var i = 0; i < inputData.Length; i++)

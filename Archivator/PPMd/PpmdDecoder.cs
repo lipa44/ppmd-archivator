@@ -15,8 +15,9 @@ public class PpmdDecoder : IDecoder
 
         var originalLength = reader.ReadInt32();
         var modelOrder = reader.ReadByte();
+        var rescaleThreshold = reader.ReadUInt16();
 
-        var model = new PpmModel(modelOrder);
+        var model = new PpmModel(modelOrder, rescaleThreshold);
         var decoder = new RangeDecoder(inStream);
 
         var output = new byte[originalLength];
