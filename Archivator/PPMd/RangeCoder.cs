@@ -1,14 +1,48 @@
+using static Archivator.PPMd.RangeCoderConstants;
+
 namespace Archivator.PPMd;
 
+/// <summary>
+/// Range Coder - целочисленный арифметический кодер.
+/// Кодирует последовательность событий <c>(cumFreq, freq, totalFreq)</c> в битовый поток.
+/// </summary>
+/// <param name="stream">Поток, в который выводятся байты сжатого сообщения.</param>
 public sealed class RangeEncoder(Stream stream)
 {
-    private const uint Top = 1u << 24;
+    /// <summary>
+    /// Стартовое значение <see cref="_cacheSize"/>: один "технический" байт-заглушка,
+    /// который декодер проигнорирует при чтении <see cref="RangeCoderConstants.StartupBytes"/> инициализационных байт.
+    /// </summary>
+    private const uint InitialCacheSize = 1;
 
+    /// <summary>
+    /// Левый край текущего интервала. Тип <c>ulong</c> (64 бита) выбран, чтобы поймать перенос из 32-го разряда после
+    /// <c>_low += cumFreq * _range</c>.
+    /// </summary>
     private ulong _low;
-    private uint _range = 0xFFFFFFFF;
-    private byte _cache;
-    private uint _cacheSize = 1;
 
+    /// <summary>
+    /// Ширина текущего интервала. После ренормализации всегда в диапазоне <c>[Top, 2^32 − 1]</c>.
+    /// </summary>
+    private uint _range = InitialRange;
+
+    /// <summary>
+    /// Кеш "последнего почти-готового" байта: он пока не выплюнут в поток, потому что за ним может прийти перенос.
+    /// Как только появится определённость - байт уходит в поток.
+    /// </summary>
+    private byte _cache;
+
+    /// <summary>
+    /// Сколько байт (включая <see cref="_cache"/> и <c>0xFF</c> за ним) сейчас висит в ожидании переноса.
+    /// </summary>
+    private uint _cacheSize = InitialCacheSize;
+
+    /// <summary>
+    /// Закодировать одно событие.
+    /// </summary>
+    /// <param name="cumFreq">Кумулятивная частота - сумма частот всех событий, предшествующих текущему.</param>
+    /// <param name="freq">Частота текущего события.</param>
+    /// <param name="totalFreq">Суммарная частота всех событий в распределении.</param>
     public void Encode(uint cumFreq, uint freq, uint totalFreq)
     {
         _range /= totalFreq;
@@ -18,58 +52,100 @@ public sealed class RangeEncoder(Stream stream)
         while (_range < Top)
         {
             ShiftLow();
-            _range <<= 8;
+            _range <<= BitsPerByte;
         }
     }
 
+    /// <summary>
+    /// Выплюнуть (или отложить) старший байт <see cref="_low"/> с учётом возможного переноса из 32-го разряда.
+    /// </summary>
     private void ShiftLow()
     {
-        var carry = (byte) (_low >> 32);
-        if ((uint) _low < 0xFF000000u || carry != 0)
+        var carry = _low >> UintBitWidth != 0 ? (byte) 1 : (byte) 0;
+        var highByteBlocksCarry = (uint) _low < HighByteFilledMask;
+
+        if (highByteBlocksCarry || carry != 0)
         {
             var temp = _cache;
+
             do
             {
                 stream.WriteByte((byte) (temp + carry));
-                temp = 0xFF;
+                temp = AllOnesByte;
             } while (--_cacheSize != 0);
 
-            _cache = (byte) (_low >> 24);
+            _cache = (byte) (_low >> HighByteBitPos);
         }
 
         _cacheSize++;
-        _low = (uint) _low << 8;
+        _low = (uint) _low << BitsPerByte;
     }
 
+    /// <summary>
+    /// Закрыть поток: вытолкнуть всё, что ещё сидит в <see cref="_low"/> и <see cref="_cache"/>.
+    /// </summary>
     public void Flush()
     {
-        for (var i = 0; i < 5; i++)
+        for (var i = 0; i < StartupBytes; i++)
             ShiftLow();
     }
 }
 
+/// <summary>
+/// Range Decoder - симметричный декодер для <see cref="RangeEncoder"/>.
+/// </summary>
 public sealed class RangeDecoder
 {
-    private const uint Top = 1u << 24;
-
+    /// <summary>Источник сжатого битового потока.</summary>
     private readonly Stream _stream;
-    private uint _code;
-    private uint _range = 0xFFFFFFFF;
 
+    /// <summary>
+    /// Текущий "указатель" внутри интервала.
+    /// </summary>
+    private uint _code;
+
+    /// <summary> Ширина интервала.</summary>
+    private uint _range = InitialRange;
+
+    /// <summary>
+    /// Инициализирует декодер чтением <see cref="RangeCoderConstants.StartupBytes"/> стартовых байт из <paramref name="stream"/>.
+    /// </summary>
+    /// <param name="stream">Поток сжатого сообщения.</param>
     public RangeDecoder(Stream stream)
     {
         _stream = stream;
-        for (var i = 0; i < 5; i++)
-            _code = (_code << 8) | ReadByte();
+
+        for (var i = 0; i < StartupBytes; i++)
+        {
+            var nextByte = ReadByte();
+
+            _code <<= BitsPerByte;
+            _code += nextByte;
+        }
     }
 
+    /// <summary>
+    /// Возвращает, сколько "единиц частоты" из <c>[0, totalFreq)</c> соответствует текущему
+    /// <see cref="_code"/>. Модель по этому числу находит, в какой поддиапазон попало событие.
+    /// </summary>
+    /// <param name="totalFreq">Суммарная частота всех событий в распределении.</param>
+    /// <returns>
+    /// Индекс в диапазоне <c>[0, totalFreq)</c>.
+    /// </returns>
     public uint GetThreshold(uint totalFreq)
     {
         _range /= totalFreq;
-        var t = _code / _range;
-        return t < totalFreq ? t : totalFreq - 1;
+
+        // Сколько целых единиц частоты "уместилось" между началом интервала и _code
+        return _code / _range;
     }
 
+    /// <summary>
+    /// После того как модель определила, что текущий <see cref="_code"/> попал в поддиапазон
+    /// <c>[cumFreq, cumFreq + freq)</c>, "зеркалит" то же сужение интервала, что сделал кодер.
+    /// </summary>
+    /// <param name="cumFreq">Кумулятивная частота найденного события.</param>
+    /// <param name="freq">Частота найденного события.</param>
     public void Decode(uint cumFreq, uint freq)
     {
         _code -= cumFreq * _range;
@@ -77,14 +153,14 @@ public sealed class RangeDecoder
 
         while (_range < Top)
         {
-            _code = (_code << 8) | ReadByte();
-            _range <<= 8;
+            var nextByte = ReadByte();
+
+            _code <<= BitsPerByte;
+            _code += nextByte;
+            _range <<= BitsPerByte;
         }
     }
 
-    private byte ReadByte()
-    {
-        var b = _stream.ReadByte();
-        return (byte) (b >= 0 ? b : 0);
-    }
+    /// <summary>Чтение байта из потока.</summary>
+    private byte ReadByte() => (byte) _stream.ReadByte();
 }

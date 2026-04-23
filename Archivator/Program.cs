@@ -7,11 +7,11 @@ if (args.Length < 3 &&
    )
 {
     Console.WriteLine("Usage: [encoder|decoder] [inputPath] [outputPath]");
+    Console.WriteLine("       testdata");
 
     return;
 }
 
-const int modelOrder = 6;
 var command = args[0];
 
 var sw = new Stopwatch();
@@ -22,7 +22,7 @@ switch (command.ToLower())
     case "encoder":
     {
         string inputPath = args[1], outputPath = args[2];
-        IEncoder encoder = new PpmdEncoder(modelOrder);
+        IEncoder encoder = new PpmdEncoder();
         await encoder.Encode(inputPath, outputPath);
 
         break;
@@ -37,15 +37,17 @@ switch (command.ToLower())
     }
     case "testdata":
     {
-        const string basePath = "./../../../TestData/";
-        var files = Directory.EnumerateFiles(basePath);
+        const string basePath = "./TestData/";
+        string[] excludedPatterns = [".decoded", ".encoded", ".DS_Store"];
+        var files = Directory.EnumerateFiles(basePath).Where(x => excludedPatterns.All(y => x.Contains(y) is false));
+
         long totalCompressedSize = 0;
 
-        foreach (var file in files.Where(x => x.Contains(".decoded") is false && x.Contains(".encoded") is false))
+        foreach (var file in files)
         {
             var huffmanFile = file + ".encoded";
 
-            IEncoder encoder = new PpmdEncoder(modelOrder);
+            IEncoder encoder = new PpmdEncoder();
             await encoder.Encode(file, huffmanFile);
 
             var compressedSize = new FileInfo(huffmanFile).Length;
@@ -69,6 +71,7 @@ switch (command.ToLower())
     default:
         Console.WriteLine($"Unknown command: {command}");
         Console.WriteLine("Usage: [encoder|decoder] [inputPath] [outputPath]");
+        Console.WriteLine("       testdata");
 
         return;
 }
