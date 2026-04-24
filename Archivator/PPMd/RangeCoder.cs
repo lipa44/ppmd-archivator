@@ -10,6 +10,11 @@ namespace Archivator.PPMd;
 public sealed class RangeEncoder(Stream stream)
 {
     /// <summary>
+    /// Счётчик количества записанных байт для подсчёта эффективности модели.
+    /// </summary>
+    public ulong WrittenBytes;
+
+    /// <summary>
     /// Стартовое значение <see cref="_cacheSize"/>: один "технический" байт-заглушка,
     /// который декодер проигнорирует при чтении <see cref="RangeCoderConstants.StartupBytes"/> инициализационных байт.
     /// </summary>
@@ -43,7 +48,8 @@ public sealed class RangeEncoder(Stream stream)
     /// <param name="cumFreq">Кумулятивная частота - сумма частот всех событий, предшествующих текущему.</param>
     /// <param name="freq">Частота текущего события.</param>
     /// <param name="totalFreq">Суммарная частота всех событий в распределении.</param>
-    public void Encode(uint cumFreq, uint freq, uint totalFreq)
+    /// <param name="writeToFile">Нужно ли кодеру записывать в файл.</param>
+    public void Encode(uint cumFreq, uint freq, uint totalFreq, bool writeToFile)
     {
         _range /= totalFreq;
         _low += cumFreq * (ulong) _range;
@@ -51,7 +57,7 @@ public sealed class RangeEncoder(Stream stream)
 
         while (_range < Top)
         {
-            ShiftLow();
+            ShiftLow(writeToFile);
             _range <<= BitsPerByte;
         }
     }
@@ -59,7 +65,8 @@ public sealed class RangeEncoder(Stream stream)
     /// <summary>
     /// Выплюнуть (или отложить) старший байт <see cref="_low"/> с учётом возможного переноса из 32-го разряда.
     /// </summary>
-    private void ShiftLow()
+    /// <param name="writeToFile">Нужно ли кодеру записывать в файл.</param>
+    private void ShiftLow(bool writeToFile)
     {
         var carry = _low >> UintBitWidth != 0 ? (byte) 1 : (byte) 0;
         var highByteBlocksCarry = (uint) _low < HighByteFilledMask;
@@ -70,7 +77,15 @@ public sealed class RangeEncoder(Stream stream)
 
             do
             {
-                stream.WriteByte((byte) (temp + carry));
+                if (writeToFile)
+                {
+                    stream.WriteByte((byte) (temp + carry));
+                }
+                else
+                {
+                    WrittenBytes++;
+                }
+
                 temp = AllOnesByte;
             } while (--_cacheSize != 0);
 
@@ -84,10 +99,11 @@ public sealed class RangeEncoder(Stream stream)
     /// <summary>
     /// Закрыть поток: вытолкнуть всё, что ещё сидит в <see cref="_low"/> и <see cref="_cache"/>.
     /// </summary>
-    public void Flush()
+    /// <param name="writeToFile">Нужно ли кодеру записывать в файл.</param>
+    public void Flush(bool writeToFile)
     {
         for (var i = 0; i < StartupBytes; i++)
-            ShiftLow();
+            ShiftLow(writeToFile);
     }
 }
 

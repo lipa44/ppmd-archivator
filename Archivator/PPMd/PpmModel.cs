@@ -103,7 +103,8 @@ public sealed class PpmModel
     /// </summary>
     /// <param name="symbol">Байт, который нужно закодировать.</param>
     /// <param name="encoder">Арифметический кодер, в который отправляется результат.</param>
-    public void EncodeSymbol(byte symbol, RangeEncoder encoder)
+    /// <param name="writeToFile">Нужно ли кодеру записывать в файл.</param>
+    public void EncodeSymbol(byte symbol, RangeEncoder encoder, bool writeToFile)
     {
         Array.Clear(_excluded, 0, AlphabetSize);
 
@@ -136,21 +137,21 @@ public sealed class PpmModel
                         cumFreq += VirtualFrequency(c);
                 }
 
-                encoder.Encode(cumFreq, VirtualFrequency(symCount), totalFreq);
+                encoder.Encode(cumFreq, VirtualFrequency(symCount), totalFreq, writeToFile);
 
                 Update(symbol);
                 return;
             }
 
             var symPart = (uint) VirtualFreqScale * activeTotal - activeDistinct;
-            encoder.Encode(symPart, activeDistinct, totalFreq);
+            encoder.Encode(symPart, activeDistinct, totalFreq, writeToFile);
 
             foreach (var (b, _) in ctx.Frequencies)
                 _excluded[b] = true;
         }
 
         // Равномерное распределение по всем неисключённым байтам.
-        EncodeUniform(symbol, encoder);
+        EncodeUniform(symbol, encoder, writeToFile);
         Update(symbol);
     }
 
@@ -232,7 +233,8 @@ public sealed class PpmModel
     /// </summary>
     /// <param name="symbol">Байт, который нужно закодировать.</param>
     /// <param name="encoder">Арифметический кодер.</param>
-    private void EncodeUniform(byte symbol, RangeEncoder encoder)
+    /// <param name="writeToFile">Нужно ли кодеру записывать в файл.</param>
+    private void EncodeUniform(byte symbol, RangeEncoder encoder, bool writeToFile)
     {
         uint activeSymbolCount = 0, pos = 0;
         for (var b = 0; b < AlphabetSize; b++)
@@ -243,7 +245,7 @@ public sealed class PpmModel
         }
 
         // Кодируем symbol с частотой 1 из remaining - равномерное распределение
-        encoder.Encode(pos, 1, activeSymbolCount);
+        encoder.Encode(pos, 1, activeSymbolCount, writeToFile);
     }
 
     /// <summary>
