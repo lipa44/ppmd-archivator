@@ -7,7 +7,7 @@
 ## Запуск
 
 > Для запуска необходимо скачать `.exe`, соответствующий платформе запуска
-> на вкладке [releases](https://github.com/lipa44/huffman-archivator/releases)
+> на вкладке [releases](https://github.com/lipa44/ppmd-archivator/releases)
 
 ```shell
 ./Archivator.exe [encoder|decoder] [inputPath] [outputPath]
